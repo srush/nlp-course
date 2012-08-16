@@ -8,50 +8,92 @@ import (
 )
 
 type Token struct {
-	word   string
-	tag_id int
+	index      int
+	word       string
+	word_id       int
+	tag        string
+	tag_id     int
+	label      string
+	label_id      int
+	category   string
+	head_index int
 }
 
 type Sentence []Token
 
+type dynamicStringMap struct {
+	forward_map         []string
+	reverse_map         map[string]int
+	counts              []int
+	counter             int	
+}
+
+func newDynamicStringMap() dynamicStringMap {
+	return dynamicStringMap {
+		forward_map:         make([]string, 0),
+		reverse_map: map[string]int{},
+		counts: make([]int, 0),
+		counter:     0,
+	}
+}
+
+func (dsm dynamicStringMap) TypesCount() int {
+	return dsm.counter
+}
+
+func (dsm dynamicStringMap) TypeIdCount(type_id int) int {
+	return dsm.counts[type_id]
+}
+
+func (dsm dynamicStringMap) TypeId(typ string) int {
+	return dsm.reverse_map[typ]
+}
+
+func (dsm dynamicStringMap) Type(id int) string {
+	return dsm.forward_map[id]
+}
+
+func (dsm *dynamicStringMap) UpdateTypeMap(typ string) int {
+	if _, ok := dsm.reverse_map[typ]; !ok {
+		dsm.reverse_map[typ] = dsm.counter
+		dsm.forward_map = append(dsm.forward_map, typ)
+		dsm.counts = append(dsm.counts, 0)
+		dsm.counter++
+	}
+	id := dsm.reverse_map[typ]
+	dsm.counts[id]++
+	return id
+}
+
+
 type Lexicon struct {
-	tag_map         map[int]string
-	reverse_tag_map map[string]int
-	tag_counter     int
+	tags dynamicStringMap
+	words dynamicStringMap
+	labels dynamicStringMap
 }
 
 func NewLexicon() *Lexicon {
 	return &Lexicon{
-		tag_map:         map[int]string{},
-		reverse_tag_map: map[string]int{},
-		tag_counter:     0,
+		tags:  newDynamicStringMap(),
+		words: newDynamicStringMap(),
+		labels: newDynamicStringMap(),
 	}
 }
 
 func (lexicon Lexicon) TagCount() int {
-	return len(lexicon.tag_map)
+	return lexicon.tags.TypesCount()
 }
 
 func (lexicon Lexicon) GetTagId(tag string) int {
-	return lexicon.reverse_tag_map[tag]
+	return lexicon.tags.TypeId(tag)
 }
 
 func (lexicon Lexicon) GetTag(tag_id int) string {
-	return lexicon.tag_map[tag_id]
+	return lexicon.tags.Type(tag_id)
 }
 
-func (lexicon *Lexicon) UpdateTagMap(tag string) int {
-	if _, ok := lexicon.reverse_tag_map[tag]; !ok {
-		lexicon.reverse_tag_map[tag] = lexicon.tag_counter
-		lexicon.tag_counter++
-	}
-	return lexicon.reverse_tag_map[tag]
-}
-
-func (lexicon *Lexicon) FinishLexicon() {
-	for tag, tag_id := range lexicon.reverse_tag_map {
-		lexicon.tag_map[tag_id] = tag
-	}
+func (corpus Corpus) NumSentences() int {
+	return len(corpus.sentences)
 }
 
 type Corpus struct {
@@ -68,20 +110,28 @@ func (token Token) TagId() int {
 }
 
 func (lexicon Lexicon) Tag(token Token) string {
-	return lexicon.tag_map[token.tag_id]
+	return lexicon.tags.Type(token.tag_id)
+}
+
+type HammingResult struct {
+	Name    string
+	Correct int
+	Total   int
+}
+
+func (result HammingResult) Percent() float64 {
+	return float64(result.Correct) / float64(result.Total)
 }
 
 type TaggingResults struct {
-	num_sentences         int
-	num_tags              int
-	num_correct_tags      int
-	num_correct_sentences int
-	num_tag               []int
-	num_correct_tag       []int
+	HammingResult
+	SentencesResult HammingResult
+	TagsResult      HammingResult
+	TagResults      []HammingResult
 }
 
-func (results TaggingResults) NumIncorrect() int {
-	return results.num_tags - results.num_correct_tags
+func (result HammingResult) NumIncorrect() int {
+	return result.Total - result.Correct
 }
 
 type ScoringError struct {
@@ -132,30 +182,42 @@ func CheckSameCorpus(gold Corpus, test Corpus) error {
 }
 
 func ScoreTagging(gold Corpus, test Corpus) (results TaggingResults) {
-	results.num_sentences = len(gold.sentences)
-	results.num_tag = make([]int, gold.lexicon.TagCount())
-	results.num_correct_tag = make([]int, gold.lexicon.TagCount())
+	results.SentencesResult.Total = len(gold.sentences)
+	results.TagResults = make([]HammingResult, gold.lexicon.TagCount())
 	for i, test_sentence := range test.sentences {
 		gold_sentence := gold.sentences[i]
-		sentence_correct_tags := 0
+		sentence_correct := true
 		for j, test_token := range test_sentence {
 			gold_token := gold_sentence[j]
 
-			results.num_tags++
-			results.num_tag[gold_token.tag_id]++
+			results.TagsResult.Total++
+			results.TagResults[gold_token.tag_id].Total++
+			results.TagResults[gold_token.tag_id].Name = gold.lexicon.GetTag(gold_token.tag_id)
 			if gold.lexicon.GetTag(gold_token.tag_id) == test.lexicon.GetTag(test_token.tag_id) {
-				results.num_correct_tags++
-				results.num_correct_tag[gold_token.tag_id]++
+				results.TagsResult.Correct++
+				results.TagResults[gold_token.tag_id].Correct++
+			} else {
+				sentence_correct = false
 			}
 		}
-		if sentence_correct_tags == len(test_sentence) {
-			results.num_correct_sentences++
+		if sentence_correct {
+			results.SentencesResult.Correct++
 		}
 	}
 	return
 }
 
-func ParseSentence(sent string, lexicon *Lexicon) (sentence Sentence, err error) {
+type CorpusFormatter interface {
+	// Read in a corpus in this format. 
+	ReadCorpus(reader io.Reader) (corpus Corpus, err error)
+
+	// Write out a corpus in this format.
+	FormatCorpus(corpus Corpus, writer io.Writer)
+}
+
+type TagFormat struct {}
+
+func (tag_format TagFormat) ReadSentence(sent string, lexicon *Lexicon) (sentence Sentence, err error) {
 	var word_tag string
 	reader := strings.NewReader(sent)
 	for {
@@ -164,13 +226,14 @@ func ParseSentence(sent string, lexicon *Lexicon) (sentence Sentence, err error)
 			break
 		}
 		split_token := strings.Split(word_tag, "/")
-		id := lexicon.UpdateTagMap(split_token[1])
-		sentence = append(sentence, Token{word: split_token[0], tag_id: id})
+		id := lexicon.tags.UpdateTypeMap(split_token[1])
+		word_id := lexicon.words.UpdateTypeMap(split_token[0])
+		sentence = append(sentence, Token{word: split_token[0], tag_id: id, tag: split_token[1], word_id : word_id})
 	}
 	return
 }
 
-func ParseCorpus(reader io.Reader) (corpus Corpus, err error) {
+func (tag_format TagFormat) ReadCorpus(reader io.Reader) (corpus Corpus, err error) {
 	buf_reader := bufio.NewReader(reader)
 	lexicon := NewLexicon()
 	for {
@@ -182,13 +245,124 @@ func ParseCorpus(reader io.Reader) (corpus Corpus, err error) {
 				return corpus, err
 			}
 		}
-		sentence, err := ParseSentence(sent, lexicon)
+		sentence, err := tag_format.ReadSentence(sent, lexicon)
 		if err != nil {
 			return corpus, err
 		}
 		corpus.sentences = append(corpus.sentences, sentence)
 	}
-	lexicon.FinishLexicon()
 	corpus.lexicon = lexicon
 	return
+}
+
+func (token Token) ToTagString() string {
+	return fmt.Sprintf("%s/%s",
+		token.word,
+		token.tag)
+}
+
+func (sentence Sentence) ToTagString() string {
+	words := make([]string, 0)
+	for _, token := range sentence {
+		words = append(words, token.ToTagString())
+	}
+	return strings.Join(words, " ")
+}
+
+func (format TagFormat) FormatCorpus(corpus Corpus, writer io.Writer) {
+	for _, sent := range corpus.sentences {
+		fmt.Fprintf(writer, "%s\n", sent.ToTagString())
+	}
+}
+
+type CoNLLFormat struct {} 
+
+func (token Token) ToCoNLLString() string {
+	return fmt.Sprintf("%d %s _ %s %s _ %d %s _ _",
+		token.index,
+		token.word,
+		token.category,
+		token.tag,
+		token.head_index,
+		token.label)
+}
+
+func (sentence Sentence) ToCoNLLString() string {
+	words := make([]string, 0)
+	for _, token := range sentence {
+		words = append(words, token.ToCoNLLString())
+	}
+	return strings.Join(words, "\n")
+}
+
+func (format CoNLLFormat) ReadToken(line string, lexicon *Lexicon) (token Token, err error) {
+	var temp string
+	fmt.Sscanf(line, "%d %s %s %s %s %s %d %s %s %s",
+		&token.index,
+		&token.word,
+		&temp,
+		&token.category,
+		&token.tag,
+		&temp,
+		&token.head_index,
+		&token.label,
+		&temp,
+		&temp)
+	token.tag_id = lexicon.tags.UpdateTypeMap(token.tag)
+	token.word_id = lexicon.words.UpdateTypeMap(token.word)
+	token.label_id = lexicon.labels.UpdateTypeMap(token.label)
+	return
+}
+
+func (format CoNLLFormat) FormatCorpus(corpus Corpus, writer io.Writer) {
+	for _, sent := range corpus.sentences{
+		fmt.Fprintf(writer, "%s\n\n", sent.ToCoNLLString())
+	}
+}
+
+func (format CoNLLFormat) ReadCorpus(reader io.Reader) (corpus Corpus, err error) {
+	buf_reader := bufio.NewReader(reader)
+	lexicon := NewLexicon()
+	var sentence Sentence
+	for {
+		line, err := buf_reader.ReadString('\n')
+		if line == "\n" {
+			corpus.sentences = append(corpus.sentences, sentence)
+			sentence = make(Sentence, 0)
+			continue
+		}
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				return corpus, err
+			}
+		}
+		token, err := format.ReadToken(line, lexicon)
+		sentence = append(sentence, token)
+		if err != nil {
+			return corpus, err
+		}
+	}
+	corpus.lexicon = lexicon
+	return
+}
+
+func ReadCorpus(reader io.Reader, file_name string) (corpus Corpus, err error) {
+	formatter := FormatterFromFile(file_name)
+	return formatter.ReadCorpus(reader)
+}
+
+var formatter = map[string]CorpusFormatter {
+	"conll" : CoNLLFormat{},
+	"tag" : TagFormat{},
+}
+
+func Formatter(formatter_string string) CorpusFormatter {
+	return formatter[formatter_string]
+}
+
+func FormatterFromFile(file_name string) CorpusFormatter {
+	split := strings.Split(file_name, ".")
+	return Formatter(split[len(split) - 1])
 }
