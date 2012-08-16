@@ -1,0 +1,81 @@
+\documentclass{article}
+\title{Part-of-Speech Tagging}
+\begin{document}
+\maketitle{}
+
+\section{Introduction}
+
+In this assignment, you will build an automatic part-of-speech tagger for English. That is we will give you a large corpus of manually tagged English sentences from the Wall Street Journal. You will then learn a hidden Markov model for the data and use it to assign part-of-speech tags to new English sentences. 
+
+\section{Data}
+
+The data from this assignment consists of 
+
+\begin{enumerate}
+  \item Training corpus [todo:link] 
+  \item Tag mapping [todo:link] This file gives an enumaration of all the tags in the corpus to a number 
+  \item Development corpus [todo:link] 
+\end{enumerate}
+
+Preliminaries: It will beneficial to be able to read and write sentences in this format and map tags to and from their value in the enumeration. 
+
+
+\[ c(w) \sum_i I(i = w ) \] 
+
+Unk conversion. 
+
+For all words seen less than 5 times. We say the word is unknown. 
+
+\begin{verbatim}
+
+\end{verbatim}
+
+Test: check conversion.
+
+
+
+\section{Estimation}
+
+A hidden Markov model (HMM) consists of two multinomial models, an emission model and a transition model. 
+
+\[ c(w, t) \sum_i I(i = w ) \] 
+
+Unknown words. 
+
+
+\[ o(w | t) = c(w , t) / c(t)  \]
+
+To Check 
+
+\[ b(w) = \max_{t} p(t | w) = \max_t c(w,  t) \] 
+
+Test: Emission model 
+
+For transitions.
+
+\[ o(t_n | t_p ) = c(t_n , t_p) / c(t_p)  \]
+
+\section{Pruning}
+
+In Lecture~ we presented a $O(nT^2)$ algorithm for inference in HMMs. On real data $T$ can be quite large $40^2$. In practice, we often prune tags from common words. 
+
+We define a common word to be a word with $c(w) > 5$. $o(t | w) = 0$ We never consider these tags for this word.
+
+Test: write out you pruning dictionary. Submit
+
+word: Tag Tag Tag
+
+\section{Inference}
+
+To find the most likely tagging for a given sentence we run viterbi algorithm. 
+
+\begin{algorithm}
+  
+\end{algorithm}
+
+Test: Compare to the scorer.
+
+\section{Advanced}
+
+
+\end{document}
