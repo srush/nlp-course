@@ -1,0 +1,97 @@
+\documentclass{article}
+\title{COMS W4705, Fall 2012: \\ Programming Assignment 1: \\ Part-of-Speech Tagging}
+\usepackage{algorithm}
+\usepackage{hyperref}
+\date{}
+\begin{document}
+\maketitle{}
+
+
+\section{Introduction}
+
+In this assignment, you will build a part-of-speech tagger and use it to a automatically tag English text. Starting from a large corpus of manually tagged English sentences, you will learn a trigram hidden Markov model from scratch and run experiments on a held-out set of development data.
+
+\section{Data}
+
+The data for this assignment consists of a training and development set both taken from the QuestionBank, a free corpus of English questions. The training set consists of 2000 sentences and development of 1000 sentences.
+
+\begin{enumerate}
+  \item Training:  \url{http://comsw4705.appspot.com/data/qtb-train.tag}
+  \item Development: \url{http://comsw4705.appspot.com/data/qtb-dev.tag}
+\end{enumerate}
+
+The data is in a simple word/tag format
+
+\begin{tabular}{ccc}
+$x^{(1)}_1/y^{(1)}_1$ & $x^{(1)}_2/y^{(1)}_2$ & $\ldots$ \\
+$x^{(2)}_1/y^{(2)}_1$ & $x^{(2)}_2/y^{(2)}_2$ & $\ldots$ \\
+$x^{(3)}_1/y^{(3)}_1$ & $x^{(3)}_2/y^{(3)}_2$ & $\ldots$ \\
+\end{tabular}
+
+The tag set is a simplified version of English part-of-speech tags consisting of the following 13 tags
+
+\[
+\mathcal{K} = \{\mbox{VERB, NOUN, PRON, ADJ, ADV, ADP, CONJ, DET, NUM, PRT, X, . }\}
+\]
+
+As a preliminary, your program should be able to read and write sentences in this format.
+
+\section{Model}
+
+The main programming portion of this assignment consists of two parts
+
+\begin{enumerate}
+\item Estimating the parameters of the model from the training data (Section 4.3).
+\item Running inference with backpointers on the development data (Section 4.4).
+\end{enumerate}
+
+In addition we will add two extensions to help the tagger in practice.
+
+\subsection{Unknown Words}
+
+The basic trigram tagger described in the notes has an issue with unknown words. It will assign zero mass to any sentence containing a word $w$ with $c(w) = 0$. Since unobserved words are very common in new sentences we need a way to handle them.
+
+\begin{itemize}
+\item One way of dealing with this problem is to use one of the smoothing methods proposed in the lecture on language modeling when estimating the model. This involves replacing the maximum-likelihood computation with a smoothed version.
+
+\item Another common trick is to simply replace rare training words ($c(w) < K$) with a special token \texttt{UNK}. This ensures $q(\mbox{\texttt{UNK}} | y) > 0$ for some y. During inference, we can then replace unknown words with this token to avoid zero probability sentences. We recommend using $K=5$ for this method.
+
+Later in the course we will study discriminitive tagging models that use a different approach to avoid this problem.
+
+\end{itemize}
+
+\subsection{Pruning}
+
+The Viterbi algorithm for trigram tagging requires $O(n|\mathcal{K}|)$ time. On this dataset, that may require around $50000$ operations per sentence. If you find that this is making your implementation too slow, you can implement one of these methods to speed things up
+
+\begin{itemize}
+\item Tag dictionary. For each word $x_i$, only consider tags $v \in \mathcal{K}$ where $e(x | v) > 0$.
+\item Trigram dictionary. For tags $u \in \mathcal{K}, v \in \mathcal{K}$, only consider tags $w \in \mathcal{K}$ where $q(v | w, u) > 0$.
+\end{itemize}
+
+This style of pruning can give large speed-ups when you precompute the allowed tags for each word and a similar set for trigrams.
+Both of these methods are exact since they only eliminate zero probability transitions and emissions.
+
+\section{Programming Hints}
+
+\begin{itemize}
+\item It is often useful to internally map tags and words to integers for fast lookup.
+\item Whenever possible, separate the HMM code from NLP specific code. The HMM should refer to states and observations, not words and tags.
+\item Errors tend to occur at the start and end of the HMM. Be careful about the boundary conditions.
+\end{itemize}
+
+\section{Evaluation}
+
+To simplify coding, we have written tools to help with evaluation. The tools live at \texttt{comsw4705.appspot.com}, and you can run them from the command-line or from the web.
+
+The main evaluation script is \texttt{/eval}. We assume that we output our tags to the file \texttt{output.tag}. We can then test our accuracy with \texttt{curl}
+
+\begin{verbatim}
+curl comsw4705.appspot.com/eval -F gold=@qtb-dev.tag -F test=@output.tag
+\end{verbatim}
+
+Alternatively there is a web interface at \url{http://comsw4705.appspot.com/} which gives the same information.
+
+Using this script our cleanroom trigram tagger scores XX%.
+
+\end{document}
